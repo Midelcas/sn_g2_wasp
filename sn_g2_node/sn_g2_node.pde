@@ -130,13 +130,17 @@ void publish(int interrupt)
   ///////////////////////////////////////////  
 
   // send XBee packet
-  while((error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length ))!=0){
-    USB.println(F("send error"));
-    
-    // blink red LED
-    Utils.blinkRedLED();
-    delay(2000);
-    USB.println(F("retrying"));
+  if((interrupt == PIR_INTERRUPT)||(interrupt == FF_INTERRUPT)){
+    while((error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length ))!=0){
+      USB.println(F("send error"));
+      
+      // blink red LED
+      Utils.blinkRedLED();
+      delay(5000);
+      USB.println(F("retrying"));
+    }
+  }else{
+    error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length );
   }
   
   // check TX flag
@@ -147,6 +151,11 @@ void publish(int interrupt)
     // blink green LED
     Utils.blinkGreenLED();
     
+  }else{
+    USB.println(F("send error"));
+      
+      // blink red LED
+      Utils.blinkRedLED();
   }
   xbee802.OFF();
 
