@@ -134,38 +134,32 @@ void setup()
 }
 
 void sendMessages(){
+  configureWiFi();
+  connectMQTT();
   for(int i=0; i<2; i++){
     if(strlen((char *)payloadList[i])>0){
       publish(topicList[i], payloadList[i]);
     }
   }
+  disconnectMQTT();
+  cleanPayload();
 }
 
 void loop()
 { 
-  cleanPayload();
   // receive XBee packet (wait for 30 seconds)
-  errorBee = xbee802.receivePacketTimeout( 30000 );
-
+  USB.printf("TIME0: %lu\n", millis());
+  errorBee = xbee802.receivePacketTimeout( 10000 );
+  USB.printf("TIME1: %lu\n", millis());
   // check answer  
-  if( errorBee == 0 ) 
-  {
+  if( errorBee == 0 ) {
     // Show data stored in '_payload' buffer indicated by '_length'
     USB.print(F("---------- Data ----------"));  
     USB.println( xbee802._payload, xbee802._length);
     USB.print(F("---------- Length ----------"));  
     USB.println( xbee802._length,DEC);
     split();
-    if(WIFI_PRO.isConnected()){
-      sendMessages();
-    }else{
-      configureWiFi();
-      connectMQTT();
-      sendMessages();
-    }
-  }
-  else
-  {
+  }else{
     switch(errorBee){
       case 1:
         USB.println(F("ERROR: Timeout when receiving answer"));
@@ -188,8 +182,16 @@ void loop()
       case 7:
         USB.println(F("ERROR: Buffer full. Not enough memory space"));
       break;
-    }   
+    }
+    
   }
+  USB.println(F("Entering in sleep mode"));
+  PWR.deepSleep("00:00:00:20", RTC_OFFSET, RTC_ALM1_MODE1, SENSOR_ON);
+  USB.println(F("Waking up"));
+  xbee802.ON();
+  USB.println(F("Xbee on"));
+  
+  sendMessages();
 }
 
 void configureWiFi(){
