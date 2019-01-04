@@ -544,6 +544,3 @@ void loop()
   measure();
   sendMessages();
 }
-
-
-

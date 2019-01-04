@@ -35,29 +35,71 @@ int y_acc;
 int z_acc;
 int bat;
 uint8_t value = 0;
-
 float temp;
 float humd;
 float pres;
-
-
 // Destination MAC address
 //////////////////////////////////////////
 char RX_ADDRESS[] = "0013A200416BE2A0";
 //////////////////////////////////////////
-
 // Define the Waspmote ID
 char WASPMOTE_ID[] = "g2_node";
-
-
 // define variable
 uint8_t error;
-
-
-
 pirSensorClass pir(SOCKET_1);
 
-
+void publish(int interrupt){ 
+  xbee802.ON();
+  frame.createFrame(ASCII);  
+  if (!interrupt) {
+    USB.print(F("\n-------------RTC--------------\n"));
+    frame.addSensor(SENSOR_ACC, x_acc, y_acc, z_acc);
+    frame.addSensor(SENSOR_TCA, temp);
+    frame.addSensor(SENSOR_HUMA, humd);
+    frame.addSensor(SENSOR_PA, pres);
+    frame.addSensor(SENSOR_BAT, bat); 
+  } else if (interrupt == PIR_INTERRUPT) {
+    USB.print(F("\n-------------PIR--------------\n"));
+    frame.addSensor(SENSOR_STR, "PIR");
+  } else if (interrupt == FF_INTERRUPT) {
+    USB.print(F("\n-------------FF--------------\n"));
+    frame.addSensor(SENSOR_STR, "FF");
+  }
+  if((interrupt == PIR_INTERRUPT)||(interrupt == FF_INTERRUPT)){
+    while((error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length ))!=0){
+      USB.println(F("send error"));
+      
+      // blink red LED
+      Utils.blinkRedLED();
+      delay(5000);
+      USB.println(F("retrying"));
+    }
+  }else{
+    for(int i=0; i<3; i++){
+      error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length );
+      if(error =0)
+        break;
+      else{
+        delay(2000);
+        USB.println(F("retrying"));
+      }
+    }
+  }
+  if( error == 0 )
+  {
+    USB.println(F("send ok"));
+    
+    // blink green LED
+    Utils.blinkGreenLED();
+    
+  }else{
+    USB.println(F("send error"));
+      
+      // blink red LED
+      Utils.blinkRedLED();
+  }
+  xbee802.OFF();
+}
 
 void setup()
 {
@@ -100,74 +142,7 @@ void setup()
 //interrupt -> 0, no interruption
 //interrupt -> 1, FF interruption
 //interrupt -> 2, PIR interruption
-void publish(int interrupt)
-{
-  ///////////////////////////////////////////
-  // 1. Create ASCII frame
-  ///////////////////////////////////////////  
-  xbee802.ON();
-  // create new frame
-  frame.createFrame(ASCII);  
-  if (!interrupt) {
-    USB.print(F("\n-------------RTC--------------\n"));
-    frame.addSensor(SENSOR_ACC, x_acc, y_acc, z_acc);
-    frame.addSensor(SENSOR_TCA, temp);
-    frame.addSensor(SENSOR_HUMA, humd);
-    frame.addSensor(SENSOR_PA, pres);
-    frame.addSensor(SENSOR_BAT, bat); 
-  } else if (interrupt == PIR_INTERRUPT) {
-    USB.print(F("\n-------------PIR--------------\n"));
-    frame.addSensor(SENSOR_STR, "PIR");
-  } else if (interrupt == FF_INTERRUPT) {
-    USB.print(F("\n-------------FF--------------\n"));
-    frame.addSensor(SENSOR_STR, "FF");
-  }
-  // add frame fields
-  
 
-  ///////////////////////////////////////////
-  // 2. Send packet
-  ///////////////////////////////////////////  
-
-  // send XBee packet
-  if((interrupt == PIR_INTERRUPT)||(interrupt == FF_INTERRUPT)){
-    while((error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length ))!=0){
-      USB.println(F("send error"));
-      
-      // blink red LED
-      Utils.blinkRedLED();
-      delay(5000);
-      USB.println(F("retrying"));
-    }
-  }else{
-    for(int i=0; i<3; i++){
-      error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length );
-      if(error =0)
-        break;
-      else{
-        delay(2000);
-        USB.println(F("retrying"));
-      }
-    }
-  }
-  
-  // check TX flag
-  if( error == 0 )
-  {
-    USB.println(F("send ok"));
-    
-    // blink green LED
-    Utils.blinkGreenLED();
-    
-  }else{
-    USB.println(F("send error"));
-      
-      // blink red LED
-      Utils.blinkRedLED();
-  }
-  xbee802.OFF();
-
-}
 
 
 void loop()
@@ -256,10 +231,5 @@ void loop()
     publish(PIR_INTERRUPT);    
     // Enable interruptions from the board
     Events.attachInt();
-
   }
-
- 
-
-
 }
