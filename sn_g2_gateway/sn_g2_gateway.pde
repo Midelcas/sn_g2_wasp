@@ -68,13 +68,18 @@ void connectMQTT(){
   if (status == true)
   {
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
+    MQTTPacket_willOptions will = MQTTPacket_willOptions_initializer;
     unsigned char buf[200];
     int buflen = sizeof(buf);
 
     // options
+    will.retained = 0;
+    will.qos=0;
+    data.will = will;
     data.clientID.cstring = (char*)"mt1";
     data.keepAliveInterval = 30;
     data.cleansession = 1;
+    data.willFlag = 0;
     int len = MQTTSerialize_connect(buf, buflen, &data);
     errorWiFi = WIFI_PRO.send( socket_handle, buf, len);
   }
@@ -203,8 +208,10 @@ void measure(){
     intFlag &= ~(SENS_INT);
     //publish(PIR_INTERRUPT);    
     // Enable interruptions from the board
+    //Events.ON();
     Events.attachInt();
   }
+  PWR.clearInterruptionPin();
 }
 void configureWiFi(){
   errorWiFi = WIFI_PRO.ON(socket);
@@ -316,44 +323,19 @@ void publish(char *topic, unsigned char *payload){
 
     int len = MQTTSerialize_publish(buf, buflen, 0, 0, 0, 0, topicString, payload, payloadlen); /* 2 */
 
-    //len += MQTTSerialize_disconnect(buf + len, buflen - len); /* 3 */
-
-
-    ////////////////////////////////////////////////
-    // 3.2. send data
-    ////////////////////////////////////////////////
     USB.println(F("Sending data"));
-    errorWiFi = WIFI_PRO.send( socket_handle, buf, len);
-
-    // check response
-    if (errorWiFi == 0)
-    {
-      USB.println(F("3.2. Send data OK"));
+    for(int i=0; i<3;i++){
+      errorWiFi=WIFI_PRO.send( socket_handle, buf, len)!=0;
+      if (errorWiFi == 0){
+        USB.println(F("3.2. Send data OK"));
+        break;
+      }else{
+        USB.println(F("3.2. errorWiFi calling 'send' function"));
+        WIFI_PRO.printErrorCode();
+        delay(2000);
+        USB.println(F("Retrying"));
+      }
     }
-    else
-    {
-      USB.println(F("3.2. errorWiFi calling 'send' function"));
-      WIFI_PRO.printErrorCode();
-    }
-
-    ////////////////////////////////////////////////
-    // 3.3. Wait for answer from server
-    ////////////////////////////////////////////////
-    /*      USB.println(F("Listen to TCP socket:"));
-          errorWiFi = WIFI_PRO.receive(socket_handle, 30000);
-
-          // check answer
-          if (errorWiFi == 0)
-          {
-            USB.println(F("\n========================================"));
-            USB.print(F("Data: "));
-            USB.println( WIFI_PRO._buffer, WIFI_PRO._length);
-
-            USB.print(F("Length: "));
-            USB.println( WIFI_PRO._length,DEC);
-            USB.println(F("========================================"));
-          }
-    */
   }
 }
 void split(){
@@ -432,7 +414,7 @@ void split(){
    }
 }
 void addStrField(unsigned char * payload, char * value, int field){
-  unsigned char aux[20]={'\0'};
+  unsigned char aux[18]={'\0'};
   if(strlen((char *)payload)>0){
     snprintf((char *)aux, 20, "&field%d=%s", field, value);
   }else{
@@ -441,7 +423,7 @@ void addStrField(unsigned char * payload, char * value, int field){
   strcat((char *)payload, (char *)aux);
 }
 void addIntField(unsigned char * payload, int value, int field){
-  unsigned char aux[20]={'\0'};
+  unsigned char aux[18]={'\0'};
   if(strlen((char *)payload)>0){
     snprintf((char *)aux, 20, "&field%d=%d", field, value);
   }else{
@@ -450,9 +432,9 @@ void addIntField(unsigned char * payload, int value, int field){
   strcat((char *)payload, (char *)aux);
 }
 void addFloatField(unsigned char * payload, float value, int field){
-  unsigned char aux[20]={'\0'};
+  unsigned char aux[18]={'\0'};
   char valueStr[6]={'\0'};
-  dtostrf(value, 2, 2, valueStr);
+  dtostrf(value, 2, 3, valueStr);
   if(strlen((char *)payload)>0){
     snprintf((char *)aux, 20, "&field%d=%s", field, valueStr);
   }else{
@@ -463,10 +445,8 @@ void addFloatField(unsigned char * payload, float value, int field){
 void waitXbeeMessage(uint32_t offset){
   xbee802.ON();
   timeout0=millis();
-  USB.printf("TIME0: %lu\n", millis());
   errorBee = xbee802.receivePacketTimeout( offset );
   timeout1=millis();
-  USB.printf("TIME1: %lu\n", millis());
   // check answer  
   if( errorBee == 0 ) {
     // Show data stored in '_payload' buffer indicated by '_length'
@@ -539,6 +519,7 @@ void loop()
   USB.println(F("Entering in sleep mode"));
   snprintf((char *)cTimeOut,12, "00:00:00:%02ul", ((2*TIMEOUT-(timeout1-timeout0))/1000) );
   USB.printf("%s\n", cTimeOut);
+  ACC.setSleepToWake();
   PWR.deepSleep(cTimeOut, RTC_OFFSET, RTC_ALM1_MODE1, SENSOR_ON);
   USB.println(F("Waking up"));
   measure();
