@@ -57,6 +57,8 @@ uint8_t error;
 
 pirSensorClass pir(SOCKET_1);
 
+
+
 void setup()
 {
 

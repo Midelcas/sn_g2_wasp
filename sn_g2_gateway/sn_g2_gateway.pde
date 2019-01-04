@@ -44,6 +44,8 @@ uint8_t errorWiFi;
 unsigned long previous;
 uint16_t socket_handle = 0;
 uint8_t status;
+char topicList[2][45];
+unsigned char payloadList[2][100]={'\0'};
 
 
 // choose socket (SELECT USER'S SOCKET)
@@ -57,17 +59,91 @@ char HOST[]        = "192.168.1.54";//"mqtt.thingspeak.com";//"10.49.1.32"; //MQ
 char REMOTE_PORT[] = "1883";  //MQTT
 char LOCAL_PORT[]  = "3000";
 ///////////////////////////////////////
+void connectMQTT(){
+  if (status == true)
+  {
+    MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
+    unsigned char buf[200];
+    int buflen = sizeof(buf);
 
+    // options
+    data.clientID.cstring = (char*)"mt1";
+    data.keepAliveInterval = 30;
+    data.cleansession = 1;
+    int len = MQTTSerialize_connect(buf, buflen, &data);
+    errorWiFi = WIFI_PRO.send( socket_handle, buf, len);
+  }
+}
+void disconnectMQTT(){
+  unsigned char buf[200];
+  int buflen = sizeof(buf);
+  int len = MQTTSerialize_disconnect(buf, buflen); /* 3 */
+
+  errorWiFi = WIFI_PRO.send( socket_handle, buf, len);
+
+    // check response
+    if (errorWiFi == 0)
+    {
+      USB.println(F("3.2. Send data OK"));
+    }
+    else
+    {
+      USB.println(F("3.2. errorWiFi calling 'send' function"));
+      WIFI_PRO.printErrorCode();
+    }
+  ////////////////////////////////////////////////
+  // 3.4. close socket
+  ////////////////////////////////////////////////
+  errorWiFi = WIFI_PRO.closeSocket(socket_handle);
+
+  // check response
+  if (errorWiFi == 0)
+  {
+    USB.println(F("3.3. Close socket OK"));
+  }
+  else
+  {
+    USB.println(F("3.3. Error calling 'closeSocket' function"));
+    WIFI_PRO.printErrorCode();
+  }
+
+  //////////////////////////////////////////////////
+  // 4. Switch OFF
+  //////////////////////////////////////////////////
+  USB.println(F("WiFi switched OFF\n\n"));
+  WIFI_PRO.OFF(socket);
+}
+void cleanPayload(){
+  for(int i=0; i < 2; i++){
+    for(int j=0; j <100;j++){
+      payloadList[i][j]='\0';
+    }
+  }
+}
 void setup()
 {  
   USB.ON();
   USB.println(F("Gateway"));
-  xbee802.ON();  
+  xbee802.ON();
+  if(!WIFI_PRO.ON(socket)){
+      configureWiFi();
+      connectMQTT();
+  }
+  strncpy(topicList[0], "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3",44);
+  strncpy(topicList[1], "g2/channels/666894/publish/J8J79SZWTMYLVK09",44);
 }
 
+void sendMessages(){
+  for(int i=0; i<2; i++){
+    if(strlen((char *)payloadList[i])>0){
+      publish(topicList[i], payloadList[i]);
+    }
+  }
+}
 
 void loop()
 { 
+  cleanPayload();
   // receive XBee packet (wait for 30 seconds)
   errorBee = xbee802.receivePacketTimeout( 30000 );
 
@@ -79,10 +155,13 @@ void loop()
     USB.println( xbee802._payload, xbee802._length);
     USB.print(F("---------- Length ----------"));  
     USB.println( xbee802._length,DEC);
-    if(!WIFI_PRO.ON(socket)){
+    split();
+    if(WIFI_PRO.isConnected()){
+      sendMessages();
+    }else{
       configureWiFi();
-      checkModuleConnection();
-      split();  
+      connectMQTT();
+      sendMessages();
     }
   }
   else
@@ -138,10 +217,7 @@ void configureWiFi(){
     USB.print(".");
   }
   status=WIFI_PRO.isConnected();
-}
 
-void checkModuleConnection(){
-  // check if module is connected
   if ( status == true )
   {
     USB.print(F("2. WiFi is connected OK"));
@@ -201,21 +277,13 @@ void checkModuleConnection(){
 }
 
 
+
 void publish(char *topic, unsigned char *payload){
   if (status == true)
   {
-    /// Publish MQTT
-    MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
     MQTTString topicString = MQTTString_initializer;
-    unsigned char buf[200];
+    unsigned char buf[200]={'\0'};
     int buflen = sizeof(buf);
-
-    // options
-    data.clientID.cstring = (char*)"mt1";
-    data.keepAliveInterval = 30;
-    data.cleansession = 1;
-    int len = MQTTSerialize_connect(buf, buflen, &data); /* 1 */
-
 
     topicString.cstring = (char *)topic;
 
@@ -223,9 +291,9 @@ void publish(char *topic, unsigned char *payload){
     
     int payloadlen = strlen((const char*)payload);
 
-    len += MQTTSerialize_publish(buf + len, buflen - len, 0, 0, 0, 0, topicString, payload, payloadlen); /* 2 */
+    int len = MQTTSerialize_publish(buf, buflen, 0, 0, 0, 0, topicString, payload, payloadlen); /* 2 */
 
-    len += MQTTSerialize_disconnect(buf + len, buflen - len); /* 3 */
+    //len += MQTTSerialize_disconnect(buf + len, buflen - len); /* 3 */
 
 
     ////////////////////////////////////////////////
@@ -264,27 +332,6 @@ void publish(char *topic, unsigned char *payload){
           }
     */
   }
-  ////////////////////////////////////////////////
-  // 3.4. close socket
-  ////////////////////////////////////////////////
-  errorWiFi = WIFI_PRO.closeSocket(socket_handle);
-
-  // check response
-  if (errorWiFi == 0)
-  {
-    USB.println(F("3.3. Close socket OK"));
-  }
-  else
-  {
-    USB.println(F("3.3. Error calling 'closeSocket' function"));
-    WIFI_PRO.printErrorCode();
-  }
-
-  //////////////////////////////////////////////////
-  // 4. Switch OFF
-  //////////////////////////////////////////////////
-  USB.println(F("WiFi switched OFF\n\n"));
-  WIFI_PRO.OFF(socket);
 }
 
 void split(){
@@ -293,8 +340,8 @@ void split(){
   char *token;
   char lookuptable[6][4]={"ACC", "NO", "ETO", "H2", "BAT", "STR"};
   uint8_t row=0;
-  char topic[]= "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3";
-  unsigned char payload[100]="";
+  /*char topic[]= "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3";
+  unsigned char payload[100]="";*/
   char inFrame[16][17];//payload is divided into significant values
   
   snprintf((char *)str, 100, "%s", xbee802._payload);
@@ -329,39 +376,38 @@ void split(){
          if(strncmp(inFrame[i], lookuptable[j],3)==0){
             switch(j){
               case 0://ACC
-                addField(payload, inFrame[i+1], 5);
-                addField(payload, inFrame[i+2], 6);
-                addField(payload, inFrame[i+3], 7);
+                addField(payloadList[0], inFrame[i+1], 5);
+                addField(payloadList[0], inFrame[i+2], 6);
+                addField(payloadList[0], inFrame[i+3], 7);
               break;
               case 1://TEMP
-                addField(payload, inFrame[i+1], j);
+                addField(payloadList[0], inFrame[i+1], j);
               break;
               case 2://HUM
-                addField(payload, inFrame[i+1], j);
+                addField(payloadList[0], inFrame[i+1], j);
               break;
               case 3://PRE
-                addField(payload, inFrame[i+1], j);
+                addField(payloadList[0], inFrame[i+1], j);
               break;
               case 4://BAT
-                addField(payload, inFrame[i+1], j);
+                addField(payloadList[0], inFrame[i+1], j);
                 bat = atoi(inFrame[i+1]);
                 if(bat < 20){
-                  addField(payload, "3", 8);
+                  addField(payloadList[0], "3", 8);
                 }
               break;
               case 5:
                 if(strncmp(inFrame[i+1], "PIR",3)==0){
-                  addField(payload, "1", 8);
+                  addField(payloadList[0], "1", 8);
 
                 }else if(strncmp(inFrame[i+1], "FF",2)==0){
-                  addField(payload, "2", 8);
+                  addField(payloadList[0], "2", 8);
                 }
               break;   
             }
          }
       }
    }
-   publish(topic, payload);
 }
 
 void addField(unsigned char * payload, char * value, int field){
