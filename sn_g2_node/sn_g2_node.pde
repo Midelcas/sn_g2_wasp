@@ -140,7 +140,15 @@ void publish(int interrupt)
       USB.println(F("retrying"));
     }
   }else{
-    error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length );
+    for(int i=0; i<3; i++){
+      error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length );
+      if(error =0)
+        break;
+      else{
+        delay(2000);
+        USB.println(F("retrying"));
+      }
+    }
   }
   
   // check TX flag
