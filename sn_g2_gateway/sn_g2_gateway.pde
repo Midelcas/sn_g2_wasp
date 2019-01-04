@@ -28,7 +28,7 @@
 #include <WaspXBee802.h>
 #include <WaspWIFI_PRO.h>
 #include <WaspFrame.h>
-
+#include <WaspSensorEvent_v30.h>
 #include <Countdown.h>
 #include <FP.h>
 #include <MQTTFormat.h>
@@ -38,6 +38,7 @@
 #include <MQTTSubscribe.h>
 #include <MQTTUnsubscribe.h>
 
+#define TIMEOUT 15000
 // define variable
 uint8_t errorBee;
 uint8_t errorWiFi;
@@ -46,12 +47,16 @@ uint16_t socket_handle = 0;
 uint8_t status;
 char topicList[2][45];
 unsigned char payloadList[2][100]={'\0'};
-
+unsigned long timeout0=0;
+unsigned long timeout1=0;
+char cTimeOut[12]={'\0'};
 
 // choose socket (SELECT USER'S SOCKET)
 ///////////////////////////////////////
 uint8_t socket = SOCKET1;
 ///////////////////////////////////////
+
+pirSensorClass pir(SOCKET_1);
 
 // choose TCP server settings
 ///////////////////////////////////////
@@ -120,80 +125,87 @@ void cleanPayload(){
     }
   }
 }
-void setup()
-{  
-  USB.ON();
-  USB.println(F("Gateway"));
-  xbee802.ON();
-  if(!WIFI_PRO.ON(socket)){
-      configureWiFi();
-      connectMQTT();
+void measure(){
+  if( intFlag & ACC_INT )
+  {
+    // unset the Sleep to Wake
+    ACC.unsetFF();
+    ACC.unSetSleepToWake();
+    // read the acceleration source register
+    delay(200);
+    USB.println(F("++++++++++++++++++++++++++++++++++"));
+    USB.println(F("++ Free Fall interrupt detected ++"));
+    USB.println(F("++++++++++++++++++++++++++++++++++"));  
+    addIntField(payloadList[1], 2, 8);
+    // clear the accelerometer interrupt flag on the general interrupt vector
+    intFlag &= ~(ACC_INT);  
+    ACC.setFF();
+    //publish(FF_INTERRUPT);
   }
-  strncpy(topicList[0], "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3",44);
-  strncpy(topicList[1], "g2/channels/666894/publish/J8J79SZWTMYLVK09",44);
-}
-
-void sendMessages(){
-  configureWiFi();
-  connectMQTT();
-  for(int i=0; i<2; i++){
-    if(strlen((char *)payloadList[i])>0){
-      publish(topicList[i], payloadList[i]);
+  //Check interruption RTC
+  if( intFlag & RTC_INT ) {
+    // clear interruption flag
+    intFlag &= ~(RTC_INT);
+    USB.println(F("-------------------------"));
+    USB.println(F("RTC INT Captured"));
+    USB.println(F("-------------------------"));
+    if(ACC.check()){
+      //----------X Value-----------------------
+      addIntField(payloadList[1], ACC.getX(), 5);
+      //x_acc = ACC.getX();
+      //----------Y Value-----------------------
+      addIntField(payloadList[1], ACC.getY(), 6);
+      //y_acc = ACC.getY();
+      //----------Z Value-----------------------
+      addIntField(payloadList[1], ACC.getZ(), 7);
+      //z_acc = ACC.getZ();
     }
-  }
-  disconnectMQTT();
-  cleanPayload();
-}
-
-void loop()
-{ 
-  // receive XBee packet (wait for 30 seconds)
-  USB.printf("TIME0: %lu\n", millis());
-  errorBee = xbee802.receivePacketTimeout( 10000 );
-  USB.printf("TIME1: %lu\n", millis());
-  // check answer  
-  if( errorBee == 0 ) {
-    // Show data stored in '_payload' buffer indicated by '_length'
-    USB.print(F("---------- Data ----------"));  
-    USB.println( xbee802._payload, xbee802._length);
-    USB.print(F("---------- Length ----------"));  
-    USB.println( xbee802._length,DEC);
-    split();
-  }else{
-    switch(errorBee){
-      case 1:
-        USB.println(F("ERROR: Timeout when receiving answer"));
-      break;
-      case 2:
-        USB.println(F("ERROR: Frame Type is not valid"));
-      break;
-      case 3:
-        USB.println(F("ERROR: Checksum byte is not available"));
-      break;
-      case 4:
-        USB.println(F("ERROR: Checksum is not correct"));
-      break;
-      case 5:
-        USB.println(F("ERROR: Error escaping character in checksum byte"));
-      break;
-      case 6:
-        USB.println(F("ERROR: Error escaping character within payload bytes"));
-      break;
-      case 7:
-        USB.println(F("ERROR: Buffer full. Not enough memory space"));
-      break;
+    //Temperature
+    addFloatField(payloadList[1], Events.getTemperature(), 1);
+    //Humidity
+    addFloatField(payloadList[1], Events.getHumidity(), 2);
+    //Pressure
+    addFloatField(payloadList[1], Events.getPressure(), 3);
+    //Battery
+    addIntField(payloadList[1], PWR.getBatteryLevel(), 4);
+    if(PWR.getBatteryLevel()<20){
+      addIntField(payloadList[1], 3, 8);
     }
+    //bat = PWR.getBatteryLevel();
+    //publish(NO_INTERRUPT);
+  }else if (intFlag & SENS_INT){// Cheak interruption from Sensor Board
+      USB.println(F("-----------------------------"));
+      USB.println(F("Sensor INT"));
+      USB.println(F("-----------------------------"));
+    // Disable interruptions from the board
+    Events.detachInt();
     
+    // Load the interruption flag
+    Events.loadInt();
+    
+    // In case the interruption came from PIR
+    if (pir.getInt())
+    {
+      USB.println(F("-----------------------------"));
+      USB.println(F("Interruption from PIR"));
+      USB.println(F("-----------------------------"));
+      addIntField(payloadList[1], 1, 8);
+    }
+    int value = pir.readPirSensor();
+    
+    while (value == 1)
+    {
+      USB.println(F("...wait for PIR stabilization"));
+      delay(1000);
+      value = pir.readPirSensor();
+    }
+    // Clean the interruption flag
+    intFlag &= ~(SENS_INT);
+    //publish(PIR_INTERRUPT);    
+    // Enable interruptions from the board
+    Events.attachInt();
   }
-  USB.println(F("Entering in sleep mode"));
-  PWR.deepSleep("00:00:00:20", RTC_OFFSET, RTC_ALM1_MODE1, SENSOR_ON);
-  USB.println(F("Waking up"));
-  xbee802.ON();
-  USB.println(F("Xbee on"));
-  
-  sendMessages();
 }
-
 void configureWiFi(){
   errorWiFi = WIFI_PRO.ON(socket);
 
@@ -277,9 +289,17 @@ void configureWiFi(){
     }
   }
 }
-
-
-
+void sendMessages(){
+  configureWiFi();
+  connectMQTT();
+  for(int i=0; i<2; i++){
+    if(strlen((char *)payloadList[i])>0){
+      publish(topicList[i], payloadList[i]);
+    }
+  }
+  disconnectMQTT();
+  cleanPayload();
+}
 void publish(char *topic, unsigned char *payload){
   if (status == true)
   {
@@ -289,7 +309,8 @@ void publish(char *topic, unsigned char *payload){
 
     topicString.cstring = (char *)topic;
 
-    USB.printf("\n---- %s %s ----\n",topicString.cstring, payload);
+    USB.printf("\n---- %s\n",topicString.cstring);
+    USB.printf("%s ----\n", payload);
     
     int payloadlen = strlen((const char*)payload);
 
@@ -335,7 +356,6 @@ void publish(char *topic, unsigned char *payload){
     */
   }
 }
-
 void split(){
   char str[100];
   const char s[2] = "#";
@@ -378,32 +398,32 @@ void split(){
          if(strncmp(inFrame[i], lookuptable[j],3)==0){
             switch(j){
               case 0://ACC
-                addField(payloadList[0], inFrame[i+1], 5);
-                addField(payloadList[0], inFrame[i+2], 6);
-                addField(payloadList[0], inFrame[i+3], 7);
+                addStrField(payloadList[0], inFrame[i+1], 5);
+                addStrField(payloadList[0], inFrame[i+2], 6);
+                addStrField(payloadList[0], inFrame[i+3], 7);
               break;
               case 1://TEMP
-                addField(payloadList[0], inFrame[i+1], j);
+                addStrField(payloadList[0], inFrame[i+1], j);
               break;
               case 2://HUM
-                addField(payloadList[0], inFrame[i+1], j);
+                addStrField(payloadList[0], inFrame[i+1], j);
               break;
               case 3://PRE
-                addField(payloadList[0], inFrame[i+1], j);
+                addStrField(payloadList[0], inFrame[i+1], j);
               break;
               case 4://BAT
-                addField(payloadList[0], inFrame[i+1], j);
+                addStrField(payloadList[0], inFrame[i+1], j);
                 bat = atoi(inFrame[i+1]);
                 if(bat < 20){
-                  addField(payloadList[0], "3", 8);
+                  addStrField(payloadList[0], "3", 8);
                 }
               break;
               case 5:
                 if(strncmp(inFrame[i+1], "PIR",3)==0){
-                  addField(payloadList[0], "1", 8);
+                  addStrField(payloadList[0], "1", 8);
 
                 }else if(strncmp(inFrame[i+1], "FF",2)==0){
-                  addField(payloadList[0], "2", 8);
+                  addStrField(payloadList[0], "2", 8);
                 }
               break;   
             }
@@ -411,9 +431,8 @@ void split(){
       }
    }
 }
-
-void addField(unsigned char * payload, char * value, int field){
-  unsigned char aux[20];
+void addStrField(unsigned char * payload, char * value, int field){
+  unsigned char aux[20]={'\0'};
   if(strlen((char *)payload)>0){
     snprintf((char *)aux, 20, "&field%d=%s", field, value);
   }else{
@@ -421,4 +440,110 @@ void addField(unsigned char * payload, char * value, int field){
   }
   strcat((char *)payload, (char *)aux);
 }
+void addIntField(unsigned char * payload, int value, int field){
+  unsigned char aux[20]={'\0'};
+  if(strlen((char *)payload)>0){
+    snprintf((char *)aux, 20, "&field%d=%d", field, value);
+  }else{
+    snprintf((char *)aux, 20, "field%d=%d", field, value);  
+  }
+  strcat((char *)payload, (char *)aux);
+}
+void addFloatField(unsigned char * payload, float value, int field){
+  unsigned char aux[20]={'\0'};
+  char valueStr[6]={'\0'};
+  dtostrf(value, 2, 2, valueStr);
+  if(strlen((char *)payload)>0){
+    snprintf((char *)aux, 20, "&field%d=%s", field, valueStr);
+  }else{
+    snprintf((char *)aux, 20, "field%d=%s", field, valueStr);  
+  }
+  strcat((char *)payload, (char *)aux);
+}
+void waitXbeeMessage(uint32_t offset){
+  xbee802.ON();
+  timeout0=millis();
+  USB.printf("TIME0: %lu\n", millis());
+  errorBee = xbee802.receivePacketTimeout( offset );
+  timeout1=millis();
+  USB.printf("TIME1: %lu\n", millis());
+  // check answer  
+  if( errorBee == 0 ) {
+    // Show data stored in '_payload' buffer indicated by '_length'
+    USB.print(F("---------- Data ----------"));  
+    USB.println( xbee802._payload, xbee802._length);
+    USB.print(F("---------- Length ----------"));  
+    USB.println( xbee802._length,DEC);
+    split();
+  }else{
+    switch(errorBee){
+      case 1:
+        USB.println(F("ERROR: Timeout when receiving answer"));
+      break;
+      case 2:
+        USB.println(F("ERROR: Frame Type is not valid"));
+      break;
+      case 3:
+        USB.println(F("ERROR: Checksum byte is not available"));
+      break;
+      case 4:
+        USB.println(F("ERROR: Checksum is not correct"));
+      break;
+      case 5:
+        USB.println(F("ERROR: Error escaping character in checksum byte"));
+      break;
+      case 6:
+        USB.println(F("ERROR: Error escaping character within payload bytes"));
+      break;
+      case 7:
+        USB.println(F("ERROR: Buffer full. Not enough memory space"));
+      break;
+    }
+    
+  }
+}
+
+void setup(){  
+  USB.ON();
+  USB.println(F("Gateway"));
+  
+  ACC.ON();
+  USB.println(F("Init ACC"));
+  
+  ACC.setFF();
+  USB.println("Free Fall interrupt configured");
+
+  USB.println(F("Init RTC"));
+  RTC.ON();       
+  
+  // Setting time
+  RTC.setTime("12:07:18:04:13:35:00");
+  USB.print(F("RTC was set to this time: "));
+  USB.println(RTC.getTime());
+
+  // Turn on the sensor board
+  Events.ON();
+  
+  // Enable interruptions from the board
+  Events.attachInt();
+  xbee802.ON();
+  strncpy(topicList[0], "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3",44);
+  strncpy(topicList[1], "g2/channels/666894/publish/J8J79SZWTMYLVK09",44);
+}
+
+void loop()
+{ 
+  // receive XBee packet (wait for 30 seconds)
+  waitXbeeMessage(TIMEOUT);
+  
+  USB.println(F("Entering in sleep mode"));
+  snprintf((char *)cTimeOut,12, "00:00:00:%02ul", ((2*TIMEOUT-(timeout1-timeout0))/1000) );
+  USB.printf("%s\n", cTimeOut);
+  PWR.deepSleep(cTimeOut, RTC_OFFSET, RTC_ALM1_MODE1, SENSOR_ON);
+  USB.println(F("Waking up"));
+  measure();
+  sendMessages();
+}
+
+
 
