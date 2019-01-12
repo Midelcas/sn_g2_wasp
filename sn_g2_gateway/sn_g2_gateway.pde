@@ -38,7 +38,7 @@
 #include <MQTTSubscribe.h>
 #include <MQTTUnsubscribe.h>
 
-#define TIMEOUT 15000
+#define TIMEOUT 3000.00
 // define variable
 uint8_t errorBee;
 uint8_t errorWiFi;
@@ -50,7 +50,8 @@ unsigned char payloadList[2][100]={'\0'};
 unsigned long timeout0=0;
 unsigned long timeout1=0;
 char cTimeOut[12]={'\0'};
-
+unsigned long totalTime=TIMEOUT*10;
+unsigned long waitTime=0;
 // choose socket (SELECT USER'S SOCKET)
 ///////////////////////////////////////
 uint8_t socket = SOCKET1;
@@ -131,99 +132,45 @@ void cleanPayload(){
   }
 }
 void measure(){
-  if( intFlag & ACC_INT )
-  {
-    // unset the Sleep to Wake
-    ACC.unsetFF();
-    ACC.unSetSleepToWake();
-    // read the acceleration source register
-    delay(200);
-    USB.println(F("++++++++++++++++++++++++++++++++++"));
-    USB.println(F("++ Free Fall interrupt detected ++"));
-    USB.println(F("++++++++++++++++++++++++++++++++++"));  
-    addIntField(payloadList[1], 2, 8);
-    // clear the accelerometer interrupt flag on the general interrupt vector
-    intFlag &= ~(ACC_INT);  
-    ACC.setFF();
-    //publish(FF_INTERRUPT);
+  USB.println(F("MEASURING"));
+
+  USB.println(F("-------------------------"));
+  USB.println(F("RTC INT Captured"));
+  USB.println(F("-------------------------"));
+  if(ACC.check()){
+    //----------X Value-----------------------
+    //----------Y Value-----------------------
+    addIntField(payloadList[1], ACC.getY(), 6);
+    //----------Z Value-----------------------
+    addIntField(payloadList[1], ACC.getZ(), 7);
   }
-  //Check interruption RTC
-  if( intFlag & RTC_INT ) {
-    // clear interruption flag
-    intFlag &= ~(RTC_INT);
-    USB.println(F("-------------------------"));
-    USB.println(F("RTC INT Captured"));
-    USB.println(F("-------------------------"));
-    if(ACC.check()){
-      //----------X Value-----------------------
-      addIntField(payloadList[1], ACC.getX(), 5);
-      //x_acc = ACC.getX();
-      //----------Y Value-----------------------
-      addIntField(payloadList[1], ACC.getY(), 6);
-      //y_acc = ACC.getY();
-      //----------Z Value-----------------------
-      addIntField(payloadList[1], ACC.getZ(), 7);
-      //z_acc = ACC.getZ();
-    }
-    //Temperature
-    addFloatField(payloadList[1], Events.getTemperature(), 1);
-    //Humidity
-    addFloatField(payloadList[1], Events.getHumidity(), 2);
-    //Pressure
-    addFloatField(payloadList[1], Events.getPressure(), 3);
-    //Battery
-    addIntField(payloadList[1], PWR.getBatteryLevel(), 4);
-    if(PWR.getBatteryLevel()<20){
-      addIntField(payloadList[1], 3, 8);
-    }
-    //bat = PWR.getBatteryLevel();
-    //publish(NO_INTERRUPT);
-  }else if (intFlag & SENS_INT){// Cheak interruption from Sensor Board
-      USB.println(F("-----------------------------"));
-      USB.println(F("Sensor INT"));
-      USB.println(F("-----------------------------"));
-    // Disable interruptions from the board
-    Events.detachInt();
-    
-    // Load the interruption flag
-    Events.loadInt();
-    
-    // In case the interruption came from PIR
-    if (pir.getInt())
-    {
-      USB.println(F("-----------------------------"));
-      USB.println(F("Interruption from PIR"));
-      USB.println(F("-----------------------------"));
-      addIntField(payloadList[1], 1, 8);
-    }
-    int value = pir.readPirSensor();
-    
-    while (value == 1)
-    {
-      USB.println(F("...wait for PIR stabilization"));
-      delay(1000);
-      value = pir.readPirSensor();
-    }
-    // Clean the interruption flag
-    intFlag &= ~(SENS_INT);
-    //publish(PIR_INTERRUPT);    
-    // Enable interruptions from the board
-    //Events.ON();
-    Events.attachInt();
+  //Temperature
+  addFloatField(payloadList[1], Events.getTemperature(), 1);
+  //Humidity
+  addFloatField(payloadList[1], Events.getHumidity(), 2);
+  //Pressure
+  addFloatField(payloadList[1], Events.getPressure(), 3);
+  //Battery
+  addIntField(payloadList[1], PWR.getBatteryLevel(), 4);
+  if(PWR.getBatteryLevel()<20){
+    addIntField(payloadList[1], 3, 8);
   }
-  PWR.clearInterruptionPin();
 }
 void configureWiFi(){
-  errorWiFi = WIFI_PRO.ON(socket);
+  errorWiFi=1;
+  while((errorWiFi = WIFI_PRO.ON(socket))){
+    if ( errorWiFi == 0 )
+    {
+      USB.println(F("1. WiFi switched ON"));
+      break;
+    }
+    else
+    {
+      USB.println(F("1. WiFi did not initialize correctly"));
+    }
+  }
 
-  if ( errorWiFi == 0 )
-  {
-    USB.println(F("1. WiFi switched ON"));
-  }
-  else
-  {
-    USB.println(F("1. WiFi did not initialize correctly"));
-  }
+  
 
   //////////////////////////////////////////////////
   // 2. Check if connected
@@ -297,14 +244,16 @@ void configureWiFi(){
   }
 }
 void sendMessages(){
-  configureWiFi();
-  connectMQTT();
+  if(!WIFI_PRO.isConnected()){
+    configureWiFi();
+    connectMQTT();
+  }
   for(int i=0; i<2; i++){
     if(strlen((char *)payloadList[i])>0){
       publish(topicList[i], payloadList[i]);
     }
   }
-  disconnectMQTT();
+  //disconnectMQTT();
   cleanPayload();
 }
 void publish(char *topic, unsigned char *payload){
@@ -493,35 +442,73 @@ void setup(){
   ACC.setFF();
   USB.println("Free Fall interrupt configured");
 
-  USB.println(F("Init RTC"));
-  RTC.ON();       
-  
-  // Setting time
-  RTC.setTime("12:07:18:04:13:35:00");
-  USB.print(F("RTC was set to this time: "));
-  USB.println(RTC.getTime());
-
   // Turn on the sensor board
   Events.ON();
+  enableInterrupts(ACC_INT);
+  ACC.setSleepToWake();
   
-  // Enable interruptions from the board
-  Events.attachInt();
-  xbee802.ON();
+  
+  USB.println(intConf);
   strncpy(topicList[0], "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3",44);
   strncpy(topicList[1], "g2/channels/666894/publish/J8J79SZWTMYLVK09",44);
+  configureWiFi();
+  connectMQTT();
+  waitTime = TIMEOUT;
 }
 
 void loop()
 { 
   // receive XBee packet (wait for 30 seconds)
-  waitXbeeMessage(TIMEOUT);
+  USB.println(waitTime);
+  waitXbeeMessage(waitTime);
+
+  if( intFlag & ACC_INT )
+  {
+    // unset the Sleep to Wake
+    ACC.unsetFF();
+    USB.println(F("++++++++++++++++++++++++++++++++++"));
+    USB.println(F("++ Free Fall interrupt detected ++"));
+    USB.println(F("++++++++++++++++++++++++++++++++++"));  
+    addIntField(payloadList[1], 2, 8);
+    // clear the accelerometer interrupt flag on the general interrupt vector
+    intFlag &= ~(ACC_INT);  
+    ACC.setFF();
+    clearIntFlag();
+    PWR.clearInterruptionPin();
+    //publish(FF_INTERRUPT);
+  }
   
-  USB.println(F("Entering in sleep mode"));
-  snprintf((char *)cTimeOut,12, "00:00:00:%02ul", ((2*TIMEOUT-(timeout1-timeout0))/1000) );
-  USB.printf("%s\n", cTimeOut);
-  ACC.setSleepToWake();
-  PWR.deepSleep(cTimeOut, RTC_OFFSET, RTC_ALM1_MODE1, SENSOR_ON);
-  USB.println(F("Waking up"));
-  measure();
-  sendMessages();
+  if(pir.readPirSensor()){
+    USB.println(F("-----------------------------"));
+    USB.println(F("Interruption from PIR"));
+    USB.println(F("-----------------------------"));
+    if(strlen((char *)payloadList[1])==0){
+      addIntField(payloadList[1], 1, 8); 
+    }
+  }
+  
+  if((timeout1-timeout0)>totalTime){
+    totalTime=0;
+    USB.println(F("A"));
+  }else{
+    totalTime-=(timeout1-timeout0);
+    USB.println(F("B"));
+    USB.println(totalTime);
+  }
+
+  if(totalTime==0){
+    measure();
+    sendMessages();
+    totalTime=10*TIMEOUT;  
+  }
+  
+  if(totalTime/TIMEOUT>0){
+    waitTime=TIMEOUT;
+    USB.println(F("C"));
+    USB.println(waitTime);
+  }else{
+    waitTime=totalTime;
+    USB.println(F("D"));
+    USB.println(waitTime);
+  }
 }
