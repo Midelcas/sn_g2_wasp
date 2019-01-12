@@ -38,7 +38,7 @@
 #include <MQTTSubscribe.h>
 #include <MQTTUnsubscribe.h>
 
-#define TIMEOUT 3000.00
+#define TIMEOUT 5000.00
 // define variable
 uint8_t errorBee;
 uint8_t errorWiFi;
@@ -50,7 +50,7 @@ unsigned char payloadList[2][100]={'\0'};
 unsigned long timeout0=0;
 unsigned long timeout1=0;
 char cTimeOut[12]={'\0'};
-unsigned long totalTime=TIMEOUT*10;
+unsigned long totalTime=TIMEOUT*6;
 unsigned long waitTime=0;
 // choose socket (SELECT USER'S SOCKET)
 ///////////////////////////////////////
@@ -95,11 +95,11 @@ void disconnectMQTT(){
     // check response
     if (errorWiFi == 0)
     {
-      USB.println(F("3.2. Send data OK"));
+      USB.println(F("\n\t\tSend data OK"));
     }
     else
     {
-      USB.println(F("3.2. errorWiFi calling 'send' function"));
+      USB.println(F("\n\t\tErrorWiFi calling 'send' function"));
       WIFI_PRO.printErrorCode();
     }
   ////////////////////////////////////////////////
@@ -110,18 +110,18 @@ void disconnectMQTT(){
   // check response
   if (errorWiFi == 0)
   {
-    USB.println(F("3.3. Close socket OK"));
+    USB.println(F("\n\t\tClose socket OK"));
   }
   else
   {
-    USB.println(F("3.3. Error calling 'closeSocket' function"));
+    USB.println(F("\n\t\tError calling 'closeSocket' function"));
     WIFI_PRO.printErrorCode();
   }
 
   //////////////////////////////////////////////////
   // 4. Switch OFF
   //////////////////////////////////////////////////
-  USB.println(F("WiFi switched OFF\n\n"));
+  USB.println(F("\n\t\tWiFi switched OFF\n"));
   WIFI_PRO.OFF(socket);
 }
 void cleanPayload(){
@@ -132,13 +132,11 @@ void cleanPayload(){
   }
 }
 void measure(){
-  USB.println(F("MEASURING"));
+  USB.println(F("\n\t-->MEASURING"));
 
-  USB.println(F("-------------------------"));
-  USB.println(F("RTC INT Captured"));
-  USB.println(F("-------------------------"));
   if(ACC.check()){
     //----------X Value-----------------------
+    addIntField(payloadList[1], ACC.getX(), 5);
     //----------Y Value-----------------------
     addIntField(payloadList[1], ACC.getY(), 6);
     //----------Z Value-----------------------
@@ -161,12 +159,12 @@ void configureWiFi(){
   while((errorWiFi = WIFI_PRO.ON(socket))){
     if ( errorWiFi == 0 )
     {
-      USB.println(F("1. WiFi switched ON"));
+      USB.println(F("\n\tWiFi switched ON"));
       break;
     }
     else
     {
-      USB.println(F("1. WiFi did not initialize correctly"));
+      USB.println(F("\n\tWiFi did not initialize correctly"));
     }
   }
 
@@ -188,8 +186,8 @@ void configureWiFi(){
 
   if ( status == true )
   {
-    USB.print(F("2. WiFi is connected OK"));
-    USB.print(F(" Time(ms):"));
+    USB.print(F("\n\tWiFi is connected OK"));
+    USB.print(F("\n\t Time(ms):"));
     USB.println(millis() - previous);
 
     // get IP address
@@ -197,26 +195,20 @@ void configureWiFi(){
 
     if (errorWiFi == 0)
     {
-      USB.print(F("IP address: "));
+      USB.print(F("\n\tIP address: "));
       USB.println( WIFI_PRO._ip );
     }
     else
     {
-      USB.println(F("getIP errorWiFi"));
+      USB.println(F("\n\tgetIP errorWiFi"));
     }
   }
   else
   {
-    USB.print(F("2. WiFi is connected ERROR"));
-    USB.print(F(" Time(ms):"));
+    USB.print(F("\n\tWiFi is connected ERROR ---"));
+    USB.print(F("\n\tTime(ms):"));
     USB.println(millis() - previous);
   }
-
-
-
-  //////////////////////////////////////////////////
-  // 3. TCP
-  //////////////////////////////////////////////////
 
   // Check if module is connected
   if (status == true)
@@ -232,12 +224,12 @@ void configureWiFi(){
       // get socket handle (from 0 to 9)
       socket_handle = WIFI_PRO._socket_handle;
 
-      USB.print(F("3.1. Open TCP socket OK in handle: "));
+      USB.print(F("\n\tOpen TCP socket OK in handle: "));
       USB.println(socket_handle, DEC);
     }
     else
     {
-      USB.println(F("3.1. Error calling 'setTCPclient' function"));
+      USB.println(F("\n\tError calling 'setTCPclient' function"));
       WIFI_PRO.printErrorCode();
       status = false;
     }
@@ -265,24 +257,29 @@ void publish(char *topic, unsigned char *payload){
 
     topicString.cstring = (char *)topic;
 
-    USB.printf("\n---- %s\n",topicString.cstring);
-    USB.printf("%s ----\n", payload);
+    USB.print(F("\n\t\tTOPIC "));
+    USB.println(topicString.cstring);
+    USB.print(F("\n\t\tPAYLOAD "));
+    USB.println((char *)payload);
     
     int payloadlen = strlen((const char*)payload);
 
     int len = MQTTSerialize_publish(buf, buflen, 0, 0, 0, 0, topicString, payload, payloadlen); /* 2 */
 
-    USB.println(F("Sending data"));
+    
+    USB.println(F("\n\t\tSending Data"));
+    
+    
     for(int i=0; i<3;i++){
       errorWiFi=WIFI_PRO.send( socket_handle, buf, len)!=0;
       if (errorWiFi == 0){
-        USB.println(F("3.2. Send data OK"));
+        USB.println(F("\n\t\tSend data OK      "));
         break;
       }else{
-        USB.println(F("3.2. errorWiFi calling 'send' function"));
+        USB.println(F("\n\t\tErrorWiFi calling 'send' function"));
         WIFI_PRO.printErrorCode();
         delay(2000);
-        USB.println(F("Retrying"));
+        USB.println(F("\n\t\tRetrying"));
       }
     }
   }
@@ -399,33 +396,31 @@ void waitXbeeMessage(uint32_t offset){
   // check answer  
   if( errorBee == 0 ) {
     // Show data stored in '_payload' buffer indicated by '_length'
-    USB.print(F("---------- Data ----------"));  
+    USB.printf(F("\n\tNew Message"));  
     USB.println( xbee802._payload, xbee802._length);
-    USB.print(F("---------- Length ----------"));  
-    USB.println( xbee802._length,DEC);
     split();
   }else{
     switch(errorBee){
       case 1:
-        USB.println(F("ERROR: Timeout when receiving answer"));
+        USB.println(F("\n\tERROR: Timeout when receiving answer"));
       break;
       case 2:
-        USB.println(F("ERROR: Frame Type is not valid"));
+        USB.println(F("\n\tERROR: Frame Type is not valid"));
       break;
       case 3:
-        USB.println(F("ERROR: Checksum byte is not available"));
+        USB.println(F("\n\tERROR: Checksum byte is not available"));
       break;
       case 4:
-        USB.println(F("ERROR: Checksum is not correct"));
+        USB.println(F("\n\tERROR: Checksum is not correct"));
       break;
       case 5:
-        USB.println(F("ERROR: Error escaping character in checksum byte"));
+        USB.println(F("\n\tERROR: Error escaping character in checksum byte"));
       break;
       case 6:
-        USB.println(F("ERROR: Error escaping character within payload bytes"));
+        USB.println(F("\n\tERROR: Error escaping character within payload bytes"));
       break;
       case 7:
-        USB.println(F("ERROR: Buffer full. Not enough memory space"));
+        USB.println(F("\n\tERROR: Buffer full. Not enough memory space"));
       break;
     }
     
@@ -434,18 +429,17 @@ void waitXbeeMessage(uint32_t offset){
 
 void setup(){  
   USB.ON();
-  USB.println(F("Gateway"));
+  USB.println(F("\nInitializing Gateway"));
   
   ACC.ON();
-  USB.println(F("Init ACC"));
+  USB.println(F("\nInitializing ACC"));
   
   ACC.setFF();
-  USB.println("Free Fall interrupt configured");
+  USB.println(F("\nFree Fall interrupt ON"));
 
   // Turn on the sensor board
   Events.ON();
   
-  USB.println(intConf);
   strncpy(topicList[0], "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3",44);
   strncpy(topicList[1], "g2/channels/666894/publish/J8J79SZWTMYLVK09",44);
   configureWiFi();
@@ -456,56 +450,45 @@ void setup(){
 void loop()
 { 
   // receive XBee packet (wait for 30 seconds)
-  USB.println(waitTime);
+  USB.println(F("\nWaiting ZigBee Message"));
   waitXbeeMessage(waitTime);
 
   if( intFlag & ACC_INT )
   {
     // unset the Sleep to Wake
     ACC.unsetFF();
-    USB.println(F("++++++++++++++++++++++++++++++++++"));
-    USB.println(F("++ Free Fall interrupt detected ++"));
-    USB.println(F("++++++++++++++++++++++++++++++++++"));  
+    USB.println(F("\n\t-->FreeFall interrupt detected")); 
     addIntField(payloadList[1], 2, 8);
-    // clear the accelerometer interrupt flag on the general interrupt vector
-    intFlag &= ~(ACC_INT);  
+    clearIntFlag(); 
     ACC.setFF();
-    clearIntFlag();
-    PWR.clearInterruptionPin();
-    //publish(FF_INTERRUPT);
+    sendMessages();
   }
   
   if(pir.readPirSensor()){
-    USB.println(F("-----------------------------"));
-    USB.println(F("Interruption from PIR"));
-    USB.println(F("-----------------------------"));
+    USB.println(F("\n\t-->PIR interrupt detected"));
     if(strlen((char *)payloadList[1])==0){
       addIntField(payloadList[1], 1, 8); 
     }
+    sendMessages();
   }
   
   if((timeout1-timeout0)>totalTime){
     totalTime=0;
-    USB.println(F("A"));
   }else{
     totalTime-=(timeout1-timeout0);
-    USB.println(F("B"));
-    USB.println(totalTime);
   }
 
   if(totalTime==0){
     measure();
     sendMessages();
-    totalTime=10*TIMEOUT;  
+    totalTime=6*TIMEOUT;  
   }
   
   if(totalTime/TIMEOUT>0){
     waitTime=TIMEOUT;
-    USB.println(F("C"));
-    USB.println(waitTime);
   }else{
     waitTime=totalTime;
-    USB.println(F("D"));
-    USB.println(waitTime);
   }
+
+  PWR.clearInterruptionPin();
 }

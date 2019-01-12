@@ -67,20 +67,24 @@ void publish(int interrupt){
   }
   if((interrupt == PIR_INTERRUPT)||(interrupt == FF_INTERRUPT)){
     while((error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length ))!=0){
-      USB.println(F("send error"));
+      if(error== 0){
+        break;
+      }else{
+        USB.println(F("send error"));
       
-      // blink red LED
-      Utils.blinkRedLED();
-      delay(5000);
-      USB.println(F("retrying"));
+        // blink red LED
+        Utils.blinkRedLED();
+        delay(5000);
+        USB.println(F("retrying")); 
+      }
     }
   }else{
     for(int i=0; i<3; i++){
       error = xbee802.send( RX_ADDRESS, frame.buffer, frame.length );
-      if(error =0)
+      if(error ==0)
         break;
       else{
-        delay(2000);
+        delay(5000);
         USB.println(F("retrying"));
       }
     }
