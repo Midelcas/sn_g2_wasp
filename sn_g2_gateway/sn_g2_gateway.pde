@@ -396,7 +396,7 @@ void waitXbeeMessage(uint32_t offset){
   // check answer  
   if( errorBee == 0 ) {
     // Show data stored in '_payload' buffer indicated by '_length'
-    USB.printf(F("\n\tNew Message"));  
+    USB.print(F("\n\tNew Message"));  
     USB.println( xbee802._payload, xbee802._length);
     split();
   }else{
@@ -452,7 +452,7 @@ void loop()
   // receive XBee packet (wait for 30 seconds)
   USB.println(F("\nWaiting ZigBee Message"));
   waitXbeeMessage(waitTime);
-
+  
   if( intFlag & ACC_INT )
   {
     // unset the Sleep to Wake
