@@ -61,7 +61,7 @@ pirSensorClass pir(SOCKET_1);
 
 // choose TCP server settings
 ///////////////////////////////////////
-char HOST[]        = "192.168.1.54";//"mqtt.thingspeak.com";//"10.49.1.32"; //MQTT Broker
+char HOST[]        = "138.100.48.251";//"192.168.1.54";//"mqtt.thingspeak.com";//; //MQTT Broker
 char REMOTE_PORT[] = "1883";  //MQTT
 char LOCAL_PORT[]  = "3000";
 ///////////////////////////////////////
