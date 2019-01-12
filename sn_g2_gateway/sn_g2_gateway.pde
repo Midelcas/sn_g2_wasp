@@ -50,7 +50,7 @@ unsigned char payloadList[2][100]={'\0'};
 unsigned long timeout0=0;
 unsigned long timeout1=0;
 char cTimeOut[12]={'\0'};
-unsigned long totalTime=TIMEOUT*6;
+unsigned long totalTime=TIMEOUT*5;
 unsigned long waitTime=0;
 // choose socket (SELECT USER'S SOCKET)
 ///////////////////////////////////////
@@ -481,7 +481,7 @@ void loop()
   if(totalTime==0){
     measure();
     sendMessages();
-    totalTime=6*TIMEOUT;  
+    totalTime=5*TIMEOUT;  
   }
   
   if(totalTime/TIMEOUT>0){
