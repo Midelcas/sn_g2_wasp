@@ -444,9 +444,6 @@ void setup(){
 
   // Turn on the sensor board
   Events.ON();
-  enableInterrupts(ACC_INT);
-  ACC.setSleepToWake();
-  
   
   USB.println(intConf);
   strncpy(topicList[0], "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3",44);
