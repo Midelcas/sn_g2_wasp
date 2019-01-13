@@ -355,9 +355,10 @@ void split(){
               case 5:
                 if(strncmp(inFrame[i+1], "PIR",3)==0){
                   addStrField(payloadList[0], "1", 8);
-
+                  sendMessages();
                 }else if(strncmp(inFrame[i+1], "FF",2)==0){
                   addStrField(payloadList[0], "2", 8);
+                  sendMessages();
                 }
               break;   
             }
