@@ -154,7 +154,7 @@ void measure(){
     addIntField(payloadList[1], 3, 8);
   }
 }
-void configureWiFi(){
+boolean configureWiFi(){
   errorWiFi=1;
   while((errorWiFi = WIFI_PRO.ON(socket))){
     if ( errorWiFi == 0 )
@@ -234,10 +234,13 @@ void configureWiFi(){
       status = false;
     }
   }
+  return status;
 }
 void sendMessages(){
   if(!WIFI_PRO.isConnected()){
-    configureWiFi();
+    while(!configureWiFi()){
+      delay(1000);
+    }
     connectMQTT();
   }
   for(int i=0; i<2; i++){
@@ -278,8 +281,11 @@ void publish(char *topic, unsigned char *payload){
       }else{
         USB.println(F("\n\t\tErrorWiFi calling 'send' function"));
         WIFI_PRO.printErrorCode();
+        //disconnectMQTT();
         delay(2000);
         USB.println(F("\n\t\tRetrying"));
+        //configureWiFi();
+        //connectMQTT();
       }
     }
   }
@@ -362,29 +368,42 @@ void split(){
 void addStrField(unsigned char * payload, char * value, int field){
   unsigned char aux[18]={'\0'};
   if(strlen((char *)payload)>0){
-    snprintf((char *)aux, 20, "&field%d=%s", field, value);
+    snprintf((char *)aux, 18, "&field%d=%s", field, value);
   }else{
-    snprintf((char *)aux, 20, "field%d=%s", field, value);  
+    snprintf((char *)aux, 18, "field%d=%s", field, value);  
   }
   strcat((char *)payload, (char *)aux);
 }
 void addIntField(unsigned char * payload, int value, int field){
   unsigned char aux[18]={'\0'};
   if(strlen((char *)payload)>0){
-    snprintf((char *)aux, 20, "&field%d=%d", field, value);
+    snprintf((char *)aux, 18, "&field%d=%d", field, value);
   }else{
-    snprintf((char *)aux, 20, "field%d=%d", field, value);  
+    snprintf((char *)aux, 18, "field%d=%d", field, value);  
   }
   strcat((char *)payload, (char *)aux);
 }
 void addFloatField(unsigned char * payload, float value, int field){
   unsigned char aux[18]={'\0'};
   char valueStr[6]={'\0'};
-  dtostrf(value, 2, 3, valueStr);
-  if(strlen((char *)payload)>0){
-    snprintf((char *)aux, 20, "&field%d=%s", field, valueStr);
+  if( value > 999999){
+    dtostrf(value, 6, 3, valueStr);
+  }else if( value > 9999){
+    dtostrf(value, 5, 3, valueStr);  
+  }else if( value > 999){
+    dtostrf(value, 4, 3, valueStr);  
+  }else if( value > 99){
+    dtostrf(value, 3, 3, valueStr);  
+  }else if( value > 9){
+    dtostrf(value, 2, 3, valueStr);  
   }else{
-    snprintf((char *)aux, 20, "field%d=%s", field, valueStr);  
+    dtostrf(value, 1, 3, valueStr);  
+  }
+  
+  if(strlen((char *)payload)>0){
+    snprintf((char *)aux, 18, "&field%d=%s", field, valueStr);
+  }else{
+    snprintf((char *)aux, 18, "field%d=%s", field, valueStr);  
   }
   strcat((char *)payload, (char *)aux);
 }
@@ -442,7 +461,9 @@ void setup(){
   
   strncpy(topicList[0], "g2/channels/648459/publish/44GWV2IQ8OU9Z7X3",44);
   strncpy(topicList[1], "g2/channels/666894/publish/J8J79SZWTMYLVK09",44);
-  configureWiFi();
+  while(!configureWiFi()){
+      delay(1000);
+  }
   connectMQTT();
   waitTime = TIMEOUT;
 }
