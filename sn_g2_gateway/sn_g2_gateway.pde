@@ -61,7 +61,7 @@ pirSensorClass pir(SOCKET_1);
 
 // choose TCP server settings
 ///////////////////////////////////////
-char HOST[]        = "138.100.48.251";//"192.168.1.54";//"mqtt.thingspeak.com";//; //MQTT Broker
+char HOST[]        = "10.49.1.26";//"138.100.48.251";//"192.168.1.54";//"mqtt.thingspeak.com";//; //MQTT Broker
 char REMOTE_PORT[] = "1883";  //MQTT
 char LOCAL_PORT[]  = "3000";
 ///////////////////////////////////////
@@ -77,7 +77,7 @@ void connectMQTT(){
     will.retained = 0;
     will.qos=0;
     data.will = will;
-    data.clientID.cstring = (char*)"mt1";
+    data.clientID.cstring = (char*)"g2";
     data.keepAliveInterval = 30;
     data.cleansession = 1;
     data.willFlag = 0;
