@@ -61,7 +61,7 @@ pirSensorClass pir(SOCKET_1);
 
 // choose TCP server settings
 ///////////////////////////////////////
-char HOST[]        = "10.49.1.26";//"138.100.48.251";//"192.168.1.54";//"mqtt.thingspeak.com";//; //MQTT Broker
+char HOST[]        = "10.49.1.26";//"138.100.48.251";//"10.151.127.208";//"192.168.1.54";//MQTT Broker
 char REMOTE_PORT[] = "1883";  //MQTT
 char LOCAL_PORT[]  = "3000";
 ///////////////////////////////////////
@@ -270,8 +270,8 @@ void publish(char *topic, unsigned char *payload){
     int len = MQTTSerialize_publish(buf, buflen, 0, 0, 0, 0, topicString, payload, payloadlen); /* 2 */
 
     
+
     USB.println(F("\n\t\tSending Data"));
-    
     
     for(int i=0; i<3;i++){
       errorWiFi=WIFI_PRO.send( socket_handle, buf, len)!=0;
